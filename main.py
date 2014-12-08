@@ -6,6 +6,15 @@ import random as r
 if not pygame.font: print('Warning, fonts disabled!')
 if not pygame.mixer: print('Warning, sound disabled!')
 
+class GameObject():
+	"""
+	Base class for all in-game objects. Contains object position
+	"""
+	
+	def __init__(self, start_pos=np.array([0,0], dtype=np.float16)):
+		self.pos = start_pos.astype(np.float16)
+
+
 def rotate_round_point(vertices, point, angle, angleInRadians=False):
 	if not angleInRadians: angle = math.radians(angle)
 	rotMatrix = np.array([[math.cos(angle), -math.sin(angle)],
@@ -87,6 +96,29 @@ class Enemy:
 		self.speed = float(speed)
 		self.coll_rect = pygame.Rect(np.array([float(pos_item) for pos_item in self.pos]) - [4,4], [9,9])
 		self.state = 'ALIVE'
+		self.angle = 0
+		self.image = pygame.image.load('zombie.png')
+		self.__image = self.image
+		self.img_vertices_relative = np.array([
+			[0,0],
+			[0,self.image.get_size()[1]],
+			self.image.get_size(),
+			[self.image.get_size()[0], 0]
+		])
+		self.rotate_center_offset = np.array([6,9])
+	
+	def rotate(self, toPos):
+		dist = [b - a for a,b in zip(self.pos, toPos)]
+		try:
+			self.angle = math.degrees(math.atan2(float(dist[1]), float(dist[0]))) % 360
+			self.image = pygame.transform.rotate(self.__image, -self.angle)
+			self.drawing_point = get_drawing_point_after_rotation(
+				self.img_vertices_relative,
+				self.rotate_center_offset,
+				360 - self.angle
+			) + self.pos - self.rotate_center_offset
+		except ZeroDivisionError as e:
+			pass
 	
 	def update(self, player_pos):
 		'''
@@ -95,16 +127,21 @@ class Enemy:
 		dist = [b - a for a,b in zip(self.pos, player_pos)]
 		try:
 			angle = math.degrees(math.atan2(float(dist[1]), float(dist[0]))) % 360
+			self.angle = 0
 			speed = np.array([math.cos(math.radians(angle)), math.sin(math.radians(angle))]) * self.speed
 			self.pos += speed
 			self.coll_rect = pygame.Rect(np.array([float(pos_item) for pos_item in self.pos]) - [4,4], [9,9])
 		except ZeroDivisionError as e:
 			pass
+		
+		self.rotate(player_pos)
 
 def main():
 	pygame.init()
 	screen = pygame.display.set_mode((640, 480,))
 	bg_color = 255, 255, 255
+	
+	font = pygame.font.Font(pygame.font.match_font('freeserif'), 12)
 	
 	player = Player(np.array([100, 100]), np.array([6, 9]), 5, "character.png")
 	speed = np.array([0,0])
@@ -119,6 +156,7 @@ def main():
 		
 		clock.tick(60)
 		if r.random() > 0.99:
+			
 			enemies.append(Enemy(np.array([10,0]), 2))
 		mouse_x, mouse_y = pygame.mouse.get_pos() 
 		#print(clock.get_fps())
@@ -168,8 +206,10 @@ def main():
 		for bullet in bullets[:]:
 			pygame.draw.rect(screen, (255,0,0,), bullet.collRect, 5)
 		for enemy in enemies[:]:
+			screen.blit(enemy.image, enemy.drawing_point)
 			pygame.draw.rect(screen, (0,255,0,), enemy.coll_rect)
 		screen.blit(player.image, player.drawing_point)
+		screen.blit(font.render("FPS: %i" % clock.get_fps(), True, (240,0,0,)), (0,0))
 		pygame.display.flip()
 
 if __name__ == '__main__': main()
